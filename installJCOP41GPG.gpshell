@@ -1,0 +1,13 @@
+mode_211
+enable_trace
+enable_timer
+
+establish_context
+card_connect
+select -AID a000000003000000
+open_sc -security 1 -keyind 0 -keyver 0 -mac_key 404142434445464748494a4b4c4d4e4f -enc_key 404142434445464748494a4b4c4d4e4f // Open secure channel
+delete -AID D2760001240002000000000000000000
+delete -AID D2760001240102000000000000000000
+install -file out/production/gpg_card/net/ss3t/javacard/gpg/javacard/gpg.cap -instParam 00 -instAID D2760001240102000000112233440000 -priv 2
+card_disconnect
+release_context
