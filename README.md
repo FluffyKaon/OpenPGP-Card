@@ -15,19 +15,21 @@ Brief instructions
 ------------------
 * Make sure that the card reader is working.
 * Install GPShell from http://sourceforge.net/p/globalplatform/wiki/GPShell/
-* Loading the applet on the card depend on the card manufacturer, version and state.
-
-*Warning!* Too many failed authentications when trying to load the applet can lock the card and make it unusable.
-
+* Load the applet on the card
+ 
+The actual parameters used to load the applet on the card depend on the card manufacturer, version and state.
 If using a JCOP 2.4.1 cards with test keys, the 'installJCOP41GPG.gpshell' script can be used:
 
     gpshell installJCOP41GPG.gpshell
 
-* Once the applet is initialized gpg / gpg2 can be used to initialize the card 
+*Warning!* Too many failed authentications when trying to load the applet can lock the card and make it unusable.
+
+* Once the applet is initialized gpg / gpg2 can be used to initialize the card.
+* GnuPG 2.0.22 or above is recommended (older versions do not support importing RSA keys in the CRT format).
 
 ```
     gpg2 --card-edit
 ```
 The user PIN is '123456' and the admin PIN is '12345678' and it changing them is recommended.
 
-For more details check this page: http://wiki.fsfe.org/Card_howtos (but note that the 'with backup' methods will need to patch gpg).
+For more details check this page: http://wiki.fsfe.org/Card_howtos (but note that the 'with backup' methods will need GnuPG 2.0.22 or above).
