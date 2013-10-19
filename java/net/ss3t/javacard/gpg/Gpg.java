@@ -43,8 +43,6 @@ import javacardx.crypto.Cipher;
  * - Supports only 2048 bit CRT RSA keys (1024 is too short and most cards don't support 4096 bits)
  * - No secure messaging support.
  * - No support for the cardholder certificate (DO 7F21).
- * - No support for Terminate DF / Activate card, if the applet is locked, deleting it and
- *   reloading it will accomplish the same.
  * - Readability was favored over code size.
  * - Will not run on cards with an APDU buffer smaller than 256 + 5 bytes.
  */
@@ -61,6 +59,8 @@ public final class Gpg extends Applet {
   public static final byte CMD_GET_DATA = (byte) 0xCA;
   public static final byte CMD_PUT_DATA = (byte) 0xDA;
   public static final byte CMD_PUT_KEY = (byte) 0xDB;
+  public static final byte CMD_TERMINATE_DF = (byte) 0xE6;
+  public static final byte CMD_ACTIVATE_FILE = (byte) 0x44;
 
   private static final short SW_PIN_FAILED_00 = 0x63C0;
   private static final short SW_PIN_BLOCKED = 0x6983;
@@ -139,6 +139,8 @@ public final class Gpg extends Applet {
       (byte) 0x97, (byte) 0x82, (byte) 0x01, (byte) 0x0,  // Modulus.
       0x5F, 0x48, (byte) 0x82, 0x03, (byte) 0x80
   };
+  // Default PINs according to spec section 4.2
+  private final byte[] defaultPIN = {0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38};
 
   private final OwnerPIN[] pins;
   // To distinguish between PW1/PW2, must be AND'ed with the OwnerPIN status.
@@ -164,14 +166,12 @@ public final class Gpg extends Applet {
   private final KeyPair authenticationKey;
   private final Cipher cipherRSA;
   private final RandomData randomData;
+  private boolean terminated = false;
 
   /**
    * Only this class's install method should create the applet object.
    */
   protected Gpg(byte[] parameters, short offset, byte length) {
-    // Default PINs according to spec section 4.2
-    final byte[] defaultPIN = {0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38};
-
     pinLength = new byte[3];
     pins = new OwnerPIN[3];
     pins[PIN_INDEX_PW1] = new OwnerPIN(MAX_TRIES_PIN1, MAX_PIN_LENGTH);
@@ -277,7 +277,13 @@ public final class Gpg extends Applet {
       buffer[2] = (byte) 0x84;
       buffer[3] = (byte) (aidLength);
       apdu.setOutgoingAndSend((short) 0, (short) (4 + aidLength));
+      if (terminated) {
+        ISOException.throwIt((short)0x6285);
+      }
       return;
+    }
+    if (terminated && ins != CMD_ACTIVATE_FILE) {
+      ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
     }
 
     short p1p2 = Util.getShort(buffer, ISO7816.OFFSET_P1);
@@ -335,6 +341,14 @@ public final class Gpg extends Applet {
           ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
         }
         internalAuthenticate(apdu);
+        break;
+
+      case CMD_TERMINATE_DF:
+        terminateDF(apdu);
+        break;
+
+      case CMD_ACTIVATE_FILE:
+        activateFile(apdu);
         break;
 
       default:
@@ -961,7 +975,7 @@ public final class Gpg extends Applet {
           // We need an extra APDU with more data.
           Util.setShort(commandChainingBuffer, TEMP_PUT_KEY_ACCUMULATOR_LENGTH, accumulatorLength);
           commandChainingBuffer[TEMP_INS] = CMD_PUT_KEY;
-          ISOException.throwIt(ISO7816.SW_BYTES_REMAINING_00);
+          return;
         }
         pos += bytesToAdd;
       } else {
@@ -972,7 +986,7 @@ public final class Gpg extends Applet {
           Util.setShort(commandChainingBuffer, TEMP_PUT_KEY_ACCUMULATOR_LENGTH, left);
           // We need an extra APDU with more data.
           commandChainingBuffer[TEMP_INS] = CMD_PUT_KEY;
-          ISOException.throwIt(ISO7816.SW_BYTES_REMAINING_00);
+          return;
         } else {
           pos = addKeyPart(buffer, pos);
         }
@@ -1066,7 +1080,6 @@ public final class Gpg extends Applet {
       commandChainingBuffer[TEMP_INS] = CMD_COMPUTE_PSO;
       Util.setShort(commandChainingBuffer, TEMP_GET_RESPONSE_LENGTH, len);
       return;  // For compatibily with GPG
-      // ISOException.throwIt(ISO7816.SW_BYTES_REMAINING_00);
     }
     // We have enough bytes to decrypt.
     cipherRSA.init(confidentialityKey.getPrivate(), Cipher.MODE_DECRYPT);
@@ -1149,5 +1162,65 @@ public final class Gpg extends Applet {
     ISOException.throwIt(ISO7816.SW_BYTES_REMAINING_00);
   }
 
+  /**
+   * Terminate DF is only valid if PW1 and PW3 are blocked.
+   * @param apdu
+   */
+  private void terminateDF(APDU apdu) {
+    byte[] buffer = apdu.getBuffer();
+    if (buffer[ISO7816.OFFSET_LC] != 0) {
+      ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+    }
+    if (pins[PIN_INDEX_PW1].getTriesRemaining() > 0 ||
+        pins[PIN_INDEX_PW3].getTriesRemaining() > 0) {
+      ISOException.throwIt(ISO7816.SW_CONDITIONS_NOT_SATISFIED);
+    }
+    terminated = true;
+  }
+
+  /**
+   * ACTIVATE FILE does nothing if the card is not in the 'initialization' state (really if it
+   * hasn't been terminated).
+   * @param apdu
+   */
+  private void activateFile(APDU apdu) {
+    if (!terminated) {
+      return;
+    }
+
+    // Since the card will not do anything until we clear the terminated bool we can erase the
+    // data without using transactions (and most likely the transaction buffer would not be
+    // large enough.
+    signatureKey.getPrivate().clearKey();
+    signatureKey.getPublic().clearKey();
+    confidentialityKey.getPrivate().clearKey();
+    confidentialityKey.getPublic().clearKey();
+    authenticationKey.getPrivate().clearKey();
+    authenticationKey.getPublic().clearKey();
+
+    pins[PIN_INDEX_PW1].update(defaultPIN, (short) 0, MIN_PIN1_LENGTH);
+    pinLength[PIN_INDEX_PW1] = MIN_PIN1_LENGTH;
+    pins[PIN_INDEX_PW3].update(defaultPIN, (short) 0, MIN_PIN3_LENGTH);
+    pinLength[PIN_INDEX_PW3] = MIN_PIN3_LENGTH;
+    // The resetting code is disabled by default.
+    pinLength[PIN_INDEX_RC] = 0;
+
+    Util.arrayFillNonAtomic(privateDO1, (short)0, (short)privateDO1.length, (byte)0);
+    Util.arrayFillNonAtomic(privateDO2, (short)0, (short)privateDO2.length, (byte)0);
+    Util.arrayFillNonAtomic(privateDO3, (short)0, (short)privateDO3.length, (byte)0);
+    Util.arrayFillNonAtomic(privateDO4, (short)0, (short)privateDO4.length, (byte)0);
+
+    Util.arrayFillNonAtomic(loginData, (short)0, (short)loginData.length, (byte)0);
+    Util.arrayFillNonAtomic(url, (short)0, (short)url.length, (byte)0);
+    Util.arrayFillNonAtomic(name, (short)0, (short)name.length, (byte)0);
+    Util.arrayFillNonAtomic(language, (short)0, (short)language.length, (byte)0);
+    sex[0] = 0;
+    Util.arrayFillNonAtomic(fingerprints, (short)0, (short)fingerprints.length, (byte)0);
+    Util.arrayFillNonAtomic(caFingerprints, (short)0, (short)caFingerprints.length, (byte)0);
+    Util.arrayFillNonAtomic(generationDates, (short)0, (short)generationDates.length, (byte)0);
+    Util.arrayFillNonAtomic(signatureCounter, (short)0, (short)signatureCounter.length, (byte)0);
+    pinValidForMultipleSignatures = (byte) 0;
+    terminated = false;
+  }
 }
 
