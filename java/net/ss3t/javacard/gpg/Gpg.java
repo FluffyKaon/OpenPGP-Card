@@ -396,6 +396,20 @@ public final class Gpg extends Applet {
   }
 
   /**
+   * Udpate the PIN and its length in a transaction.
+   * @param pinId which PIN will be updated.
+   * @param data contains the new PIN.
+   * @param dataOffset first byte of the new PIN in the data array.
+   * @param newLength the new PIN length.
+   */
+  private void updatePIN(short pinId, byte[] data, short dataOffset, byte newLength) {
+    JCSystem.beginTransaction();
+    pins[pinId].update(data, dataOffset, newLength);
+    pinLength[pinId] = newLength;
+    JCSystem.commitTransaction();
+  }
+
+  /**
    * CHANGE REFERENCE DATA APDU implementation.
    */
   private void changeReferenceData(APDU apdu) {
@@ -426,9 +440,8 @@ public final class Gpg extends Applet {
       pinSubmitted[0] = false;
       ISOException.throwIt((short) (SW_PIN_FAILED_00 + pins[pinOffset].getTriesRemaining()));
     }
-    pins[pinOffset].update(buffer, (short) (ISO7816.OFFSET_CDATA + currentLength),
-                           (byte) (length - currentLength));
-    pinLength[pinOffset] = (byte) (length - currentLength);
+    updatePIN(pinOffset, buffer, (short) (ISO7816.OFFSET_CDATA + currentLength),
+              (byte) (length - currentLength));
   }
 
   /**
@@ -455,9 +468,8 @@ public final class Gpg extends Applet {
         ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
       }
       if (pins[PIN_INDEX_RC].check(buffer, ISO7816.OFFSET_CDATA, rcLength)) {
-        pins[PIN_INDEX_PW1].update(buffer, (short) (ISO7816.OFFSET_CDATA + rcLength),
-                                   (byte) (length - rcLength));
-        pinLength[PIN_INDEX_PW1] = (byte) (length - rcLength);
+        updatePIN(PIN_INDEX_PW1, buffer, (short) (ISO7816.OFFSET_CDATA + rcLength),
+                  (byte) (length - rcLength));
       } else {
         ISOException.throwIt((short) (SW_PIN_FAILED_00 + pins[PIN_INDEX_RC].getTriesRemaining()));
       }
@@ -469,8 +481,7 @@ public final class Gpg extends Applet {
       if (length < MIN_PIN1_LENGTH || length > MAX_PIN_LENGTH) {
         ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
       }
-      pins[PIN_INDEX_PW1].update(buffer, ISO7816.OFFSET_CDATA, (byte) length);
-      pinLength[PIN_INDEX_PW1] = (byte) length;
+      updatePIN(PIN_INDEX_PW1, buffer, ISO7816.OFFSET_CDATA, (byte) length);
     } else {
       ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
     }
@@ -779,8 +790,7 @@ public final class Gpg extends Applet {
         if (length > MAX_PIN_LENGTH || (length != (byte) 0 && length < (byte) 8)) {
           ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         }
-        pinLength[PIN_INDEX_RC] = buffer[0];
-        pins[PIN_INDEX_RC].update(buffer, (short) 1, buffer[0]);
+        updatePIN(PIN_INDEX_RC, buffer, (short) 1, buffer[0]);
         break;
 
       default:
