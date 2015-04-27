@@ -14,6 +14,7 @@ The applet was developed and tested on a JCOP 2.4.1 card (NXP J2A080).
 Brief instructions
 ------------------
 * Make sure that the card reader is working.
+* Install the GlobalPlatform and gppcscconnectionplugin libraries from http://sourceforge.net/projects/globalplatform/files/GlobalPlatform%20Library/GlobalPlatform%20Library%206.0.0/
 * Install GPShell from http://sourceforge.net/p/globalplatform/wiki/GPShell/
 * Load the applet on the card
  
