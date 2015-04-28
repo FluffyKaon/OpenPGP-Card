@@ -14,9 +14,9 @@ The applet was developed and tested on a JCOP 2.4.1 card (NXP J2A080).
 Brief instructions
 ------------------
 * Make sure that the card reader is working.
-* Easy option:
-  * Use [GlobalPlatformPro](https://github.com/martinpaljak/GlobalPlatformPro) to install the CAP file 
-* Or 
+* The easiest way is to use [GlobalPlatformPro](https://github.com/martinpaljak/GlobalPlatformPro) to install the CAP file 
+
+* The harder way is to use the GlobalPlatform tools 
   * Install the GlobalPlatform and gppcscconnectionplugin libraries from http://sourceforge.net/projects/globalplatform/files/GlobalPlatform%20Library/GlobalPlatform%20Library%206.0.0/
   * Install GPShell from http://sourceforge.net/p/globalplatform/wiki/GPShell/
   * Load the applet on the card
@@ -32,7 +32,7 @@ If using a JCOP 2.4.1 cards with test keys, the 'installJCOP41GPG.gpshell' scrip
 * GnuPG 2.0.22 or above is recommended (older versions do not support importing RSA keys in the CRT format).
 
 ```
-    gpg2 --card-edit
+gpg2 --card-edit
 ```
 The user PIN is '123456' and the admin PIN is '12345678' and it changing them is recommended.
 
