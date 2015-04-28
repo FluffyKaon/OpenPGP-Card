@@ -309,6 +309,7 @@ public final class Gpg extends Applet {
           computeSignature(apdu);
         } else if (p1p2 == (short) 0x8086) {
           decrypt(apdu);
+          return; // After successful decryption, keep the command chaining buffer empty.
         } else {
           ISOException.throwIt(ISO7816.SW_INCORRECT_P1P2);
         }
@@ -1095,6 +1096,8 @@ public final class Gpg extends Applet {
     cipherRSA.init(confidentialityKey.getPrivate(), Cipher.MODE_DECRYPT);
     len = cipherRSA.doFinal(commandChainingBuffer, TEMP_GET_RESPONSE_DATA, RSA_KEY_LENGTH_BYTES,
                             buffer, (short) 0);
+    // Clear command chaining buffer to make ready for next operation.
+    Util.arrayFillNonAtomic(commandChainingBuffer, (short) 0, (short) commandChainingBuffer.length, (byte) 0);
     apdu.setOutgoingAndSend((short) 0, len);
   }
 

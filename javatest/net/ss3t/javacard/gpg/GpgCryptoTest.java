@@ -250,6 +250,7 @@ public abstract class GpgCryptoTest extends GpgTest {
       "ca 41 2e 39 53 50 c5 9a 1d 84 2b c4 aa 2f 3c 0b" +
       "24 3f de 7d fd 95 35 6f 24 39 25 1a 11 72 c4 5e";
 
+  // Example 15.1
   final String encryptedData =
       "60 42 e7 45 58 9a f0 3a f8 75 20 f9 3c 45 d8 c3" +
       "59 85 ad a1 16 1a 37 d8 22 e9 f9 46 0f c7 5f cf" +
@@ -270,6 +271,29 @@ public abstract class GpgCryptoTest extends GpgTest {
 
   final String clearData =
       "2a ac ec 86 f4 23 dd 92 5e c1 58 82 2a 74 8c be 6c 31 a0";
+
+  // Example 15.2
+  final String encryptedData2 =
+      "44 e6 71 e0 3b b6 67 80 ec 05 86 d5 6f 8f 6a 49" +
+      "41 5a d4 bb ce 22 6d 75 d7 0f 06 ce 29 de ea 7d" +
+      "a1 af a8 28 7e 44 36 3c 51 0f 34 eb 8b f3 1c a2" +
+      "47 29 59 26 9c 18 df 09 36 ff 12 c6 16 6f 4f 45" +
+      "96 cb 1c ae c4 1d ed a8 c5 09 99 bf 4c 94 4d 21" +
+      "37 5b 36 75 31 91 b4 cb 7c aa 1b 43 e9 11 6c bf" +
+      "1d a8 b2 01 d2 97 a4 d0 8b b0 e5 bd c8 95 32 70" +
+      "f7 c2 80 96 78 c4 4b ea 75 e8 1f ac 22 d2 71 06" +
+      "30 2b b6 9d a0 74 b6 ef a6 68 8c f8 35 c8 0b f5" +
+      "e4 55 35 28 ec e0 b7 c1 b7 7b 66 6e a3 45 23 ec" +
+      "1f cb 3e 25 05 4e 0b b8 e4 ba 02 7e 5c 21 bf 7a" +
+      "51 43 bf 04 1c e9 cc bc fa fa 87 80 82 fe 41 f7" +
+      "8c 70 bf 4e 53 cf 48 7c 1a ad b0 19 15 ce dd e8" +
+      "cd 9f b8 4e fd 98 1a c9 8c d5 7a 82 56 d4 e9 e2" +
+      "d0 86 2d ab 04 54 d3 ff 4f b9 85 26 4a 46 99 5a" +
+      "b0 68 a7 4e dc 7e d8 ae ff 5f a3 0f 3a 7d 75 94";
+
+  final String clearData2 =
+      "5c 8b f2 ac ab 08 bf fe fa 64 80 95 2b 24 da a5" +
+      "01 9d 12 5f ee";
 
   private byte[] createSha1DigestInfo(String data) throws NoSuchAlgorithmException {
     MessageDigest mac = MessageDigest.getInstance("SHA1");
@@ -510,6 +534,25 @@ public abstract class GpgCryptoTest extends GpgTest {
     // Check that the decrytion key is not operable.
     assertSWOnly(0x6A82, card.sendAPDU(0, Gpg.CMD_COMPUTE_PSO, 0x80, 0x86,
                                        Arrays.copyOfRange(eData, 0, 128)));
+  }
+
+  @Test
+  public void decryptWithCommandChaining() throws CardException {
+    byte[] data = encodeCRTKey(0xB8, encryptionP, encryptionQ, encryptionDP1, encryptionDQ1,
+                               encryptionPQ);
+    // Submit PW3
+    assertSWOnly(0x9000, card.sendAPDU(0, Gpg.CMD_VERIFY, 0, 0x83, "31 32 33 34 35 36 37 38"));
+    // Load the encrytion key.
+    sendKey(data);
+    assertSWOnly(0x9000, card.sendAPDU(0, Gpg.CMD_VERIFY, 0, 0x82, "31 32 33 34 35 36"));
+
+    byte[] eData = toByteArray("00" + encryptedData);
+    ResponseAPDU r = sendLong(0, Gpg.CMD_COMPUTE_PSO, 0x80, 0x86, eData, 250);
+    assertArrayEquals("Expected: " + clearData, toByteArray(clearData), r.getData());
+
+    eData = toByteArray("00" + encryptedData2);
+    r = sendLong(0, Gpg.CMD_COMPUTE_PSO, 0x80, 0x86, eData, 250);
+    assertArrayEquals("Expected: " + clearData2, toByteArray(clearData2), r.getData());
   }
 
   @Test
